@@ -381,9 +381,9 @@ btree_by_seq_join(<<Seq:48>>, Val) ->
     <<SizeId:12,SizeBody:28,Deleted:1,Bp:47,Meta:8,RevPos:32,
         Id:SizeId/binary,RevId/binary>> = Val,
     #doc_info{
-        id = Id,
+        id = binary:copy(Id),
         local_seq = Seq,
-        rev = {RevPos, RevId},
+        rev = {RevPos, binary:copy(RevId)},
         deleted = (Deleted == 1),
         content_meta = Meta,
         body_ptr = Bp,
@@ -400,7 +400,7 @@ btree_by_id_join(Id, Bin) ->
     #doc_info{
         id = Id,
         local_seq = Seq,
-        rev = {RevPos, RevId},
+        rev = {RevPos, binary:copy(RevId)},
         deleted = (DeletedBit == 1),
         body_ptr = Bp,
         content_meta = Meta,
