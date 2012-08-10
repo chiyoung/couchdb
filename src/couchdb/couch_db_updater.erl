@@ -252,28 +252,27 @@ handle_call({update_header_pos, FileVersion, NewPos}, _From, Db) ->
     % previous call sets close after timeout to infinity.
     ok = couch_file:set_close_after(Db#db.fd, ?FD_CLOSE_TIMEOUT_MS),
     ExistingFileVersion = file_version(Db#db.filepath),
-    if FileVersion == ExistingFileVersion ->
-        case couch_file:read_header_bin(Db#db.fd, NewPos) of
-        {ok, NewHeaderBin} ->
-            NewHeader = header_bin_to_db_header(NewHeaderBin),
-            if Db#db.update_seq > NewHeader#db_header.update_seq ->
-                ?LOG_INFO("Database ~s, received pointer to header with a "
-                    "non-greater seq number (current ~p, new header ~p)",
-                    [Db#db.name, Db#db.update_seq, NewHeader#db_header.update_seq]),
-                {reply, update_behind_couchdb, Db};
-            true ->
-                NewDb = populate_db_from_header(Db, NewHeader),
-                ok = notify_db_updated(NewDb),
-                couch_db_update_notifier:notify({updated, {NewDb#db.name, NewDb#db.update_seq}}),
-                {reply, ok, NewDb}
-            end;
-        Error ->
-            {reply, Error, Db}
-        end;
-    FileVersion < ExistingFileVersion ->
-        {reply, retry_new_file_version, Db};
+    if FileVersion /= ExistingFileVersion ->
+        Tokens = string:tokens(Db#db.filepath, "."),
+        FilePathPrefix = lists:nth(1, Tokens),
+        NewFilePath = FilePathPrefix ++ "." ++ integer_to_list(FileVersion),
+        {ok, NewFd} = couch_file:open(NewFilePath),
+        {ok, HeaderBin} = couch_file:read_header_bin(NewFd),
+        Header = header_bin_to_db_header(HeaderBin),
+        Db2 = init_db(Db#db.name, NewFilePath, NewFd, Header, Db#db.options),
+        ok = couch_file:set_close_after(NewFd, ?FD_CLOSE_TIMEOUT_MS);
     true ->
-        {reply, update_file_ahead_of_couchdb, Db}
+        Db2 = Db
+    end,
+    case couch_file:read_header_bin(Db2#db.fd, NewPos) of
+    {ok, NewHeaderBin} ->
+        NewHeader = header_bin_to_db_header(NewHeaderBin),
+        NewDb = populate_db_from_header(Db2, NewHeader),
+        ok = notify_db_updated(NewDb),
+        couch_db_update_notifier:notify({updated, {NewDb#db.name, NewDb#db.update_seq}}),
+        {reply, ok, NewDb};
+    Error ->
+        {reply, Error, Db2}
     end;
 
 handle_call({add_update_listener, Pid, Tag}, _From, Db) ->
