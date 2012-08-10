@@ -255,7 +255,7 @@ handle_call({update_header_pos, FileVersion, NewPos}, _From, Db) ->
     if FileVersion /= ExistingFileVersion ->
         Tokens = string:tokens(Db#db.filepath, "."),
         FilePathPrefix = lists:nth(1, Tokens),
-        NewFilePath = FilePathPrefix ++ "." ++ integer_to_list(FileVersion),
+        NewFilePath = FilePathPrefix ++ ".couch." ++ integer_to_list(FileVersion),
         {ok, NewFd} = couch_file:open(NewFilePath),
         {ok, HeaderBin} = couch_file:read_header_bin(NewFd),
         Header = header_bin_to_db_header(HeaderBin),
